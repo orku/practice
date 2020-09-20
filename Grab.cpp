@@ -14,6 +14,56 @@ using namespace std;
 // Number of images to be grabbed.
 static const uint32_t c_countOfImagesToGrab = 100;
 
+void BaslerCameraGrab(CBaslerUniversalInstantCamera& camera, static const uint32_t c_countOfImagesToGrab){
+    camera.StartGrabbing();
+    CGrabResultPtr ptrGrabResult;
+    for (uint32_t i = 0; camera.IsGrabbing() && i <= c_countOfImagesToGrab; ++i)
+    {
+        // Wait for an image and then retrieve it. A timeout of 5000 ms is used.
+        camera.RetrieveResult(5000, ptrGrabResult, TimeoutHandling_ThrowException);
+        // Image grabbed successfully?
+        if (ptrGrabResult->GrabSucceeded())
+        {
+            // Access the image data.
+            cout << "SizeX: " << ptrGrabResult->GetWidth() << endl;
+            cout << "SizeY: " << ptrGrabResult->GetHeight() << endl;
+            const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult->GetBuffer();
+            cout << "Gray value of first pixel: " << (uint32_t)pImageBuffer[0] << endl << endl;
+            // Display the grabbed image.
+            Pylon::DisplayImage(1, ptrGrabResult);
+        }
+        else
+        {
+            cout << "Error: " << ptrGrabResult->GetErrorCode() << " " << ptrGrabResult->GetErrorDescription() << endl;
+        }
+    }
+}
+
+void BaslerCameraGrab(CBaslerUniversalInstantCamera& camera) {
+    camera.StartGrabbing();
+    CGrabResultPtr ptrGrabResult;
+    while (camera.IsGrabbing())
+    {
+        // Wait for an image and then retrieve it. A timeout of 5000 ms is used.
+        camera.RetrieveResult(5000, ptrGrabResult, TimeoutHandling_ThrowException);
+        // Image grabbed successfully?
+        if (ptrGrabResult->GrabSucceeded())
+        {
+            // Access the image data.
+            cout << "SizeX: " << ptrGrabResult->GetWidth() << endl;
+            cout << "SizeY: " << ptrGrabResult->GetHeight() << endl;
+            const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult->GetBuffer();
+            cout << "Gray value of first pixel: " << (uint32_t)pImageBuffer[0] << endl << endl;
+            // Display the grabbed image.
+            Pylon::DisplayImage(1, ptrGrabResult);
+        }
+        else
+        {
+            cout << "Error: " << ptrGrabResult->GetErrorCode() << " " << ptrGrabResult->GetErrorDescription() << endl;
+        }
+    }
+}
+
 
 // Limits the amount of cameras used for grabbing.
 // It is important to manage the available bandwidth when grabbing with multiple cameras.
@@ -58,33 +108,11 @@ int main(int argc, char* argv[])
         right_camera.ExposureTimeRaw.SetValue(15000);
         left_camera.ExposureTimeRaw.SetValue(15000);
 
-        right_camera.StartGrabbing();
-        CGrabResultPtr ptrGrabResult;
-        //TODO допилить это всё
-        while (right_camera.IsGrabbing())
-        {
-            // Wait for an image and then retrieve it. A timeout of 5000 ms is used.
-            right_camera.RetrieveResult(5000, ptrGrabResult, TimeoutHandling_ThrowException);
+        BaslerCameraGrab(right_camera, c_countOfImagesToGrab);
+        BaslerCameraGrab(left_camera, c_countOfImagesToGrab);
 
-            // Image grabbed successfully?
-            if (ptrGrabResult->GrabSucceeded())
-            {
-                // Access the image data.
-                cout << "SizeX: " << ptrGrabResult->GetWidth() << endl;
-                cout << "SizeY: " << ptrGrabResult->GetHeight() << endl;
-                const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult->GetBuffer();
-                cout << "Gray value of first pixel: " << (uint32_t)pImageBuffer[0] << endl << endl;
+        cout << left_camera.ExposureTimeRaw.GetValue() << "     " << right_camera.ExposureTimeRaw.GetValue() << endl;
 
-
-                // Display the grabbed image.
-                Pylon::DisplayImage(1, ptrGrabResult);
-
-            }
-            else
-            {
-                cout << "Error: " << ptrGrabResult->GetErrorCode() << " " << ptrGrabResult->GetErrorDescription() << endl;
-            }
-        }
     }
     catch (const GenericException& e)
     {
