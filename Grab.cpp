@@ -6,6 +6,7 @@
 #endif
 #include<opencv2/opencv.hpp>
 #include<opencv2/calib3d.hpp>
+#include<opencv2/calib3d/calib3d.hpp>
 #include<opencv2/highgui.hpp>
 #include<opencv2/video.hpp>
 #include<opencv2/core.hpp>
@@ -88,6 +89,22 @@ int main(int argc, char* argv[])
     // The exit code of the sample application.
     int exitCode = 0;
     const size_t count_of_camers = 2;
+    const float calibration_squar_edge_length = 0.03f; // in meters
+    const cv::Size_<int> board_sz = cv::Size(8, 8);
+    std::vector<cv::Point2f > corners_1, corners_2;
+    std::vector<std::vector<cv::Point2f>> img_points_left, img_points_right;
+    std::vector<cv::Point3f> object_corners;
+    std::vector<std::vector<cv::Point3f>> object_points;
+
+    cout << " create_known_board_position " << endl;
+    for (int i = 0; i < board_sz.width; ++i) {
+        for (int j = 0; j < board_sz.height; ++j) {
+            //cout << i * calibration_squar_edge_length << ' ' << j * calibration_squar_edge_length << endl;
+            object_corners.push_back(cv::Point3f(i * calibration_squar_edge_length, j * calibration_squar_edge_length, 0.0f));
+        }
+    }
+
+
 
     // Before using any pylon methods, the pylon runtime must be initialized. 
     PylonInitialize();
@@ -124,6 +141,7 @@ int main(int argc, char* argv[])
 
         CPylonImage pylon_img;
 
+
         right_camera.StartGrabbing();
         CGrabResultPtr ptrGrabResult;
         for (uint32_t i = 0; right_camera.IsGrabbing() && i <= c_countOfImagesToGrab; ++i)
@@ -147,6 +165,16 @@ int main(int argc, char* argv[])
                 cv::namedWindow("open cv window", CV_WINDOW_NORMAL);
                 cv::imshow("open cv window", opencv_image);
                 cv::waitKey(1);
+                cout << "let's wait" << endl;
+                bool result_right = cv::findChessboardCorners(opencv_image, board_sz, corners_1);
+                if (result_right) {
+                    cv::Mat opencv_image_with_corners(opencv_image);
+                    cv::drawChessboardCorners(opencv_image_with_corners, board_sz, corners_1, result_right);
+                    cv::imshow("with corners", opencv_image);
+                    cv::waitKey(100000);
+                    cout << "we find it" << endl;
+                }
+
             }
             else
             {
