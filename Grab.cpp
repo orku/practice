@@ -4,6 +4,13 @@
 #ifdef PYLON_WIN_BUILD
 #    include <pylon/PylonGUI.h>
 #endif
+#include<opencv2/opencv.hpp>
+#include<opencv2/calib3d.hpp>
+#include<opencv2/highgui.hpp>
+#include<opencv2/video.hpp>
+#include<opencv2/core.hpp>
+#include <opencv2/core/hal/interface.h>
+#include "Grab.h"
 
 // Namespace for using pylon objects.
 using namespace Pylon;
@@ -30,7 +37,7 @@ void BaslerCameraGrab(CBaslerUniversalInstantCamera& camera, static const uint32
             const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult->GetBuffer();
             cout << "Gray value of first pixel: " << (uint32_t)pImageBuffer[0] << endl << endl;
             // Display the grabbed image.
-            Pylon::DisplayImage(1, ptrGrabResult);
+            Pylon::DisplayImage(0, ptrGrabResult);
         }
         else
         {
@@ -53,9 +60,9 @@ void BaslerCameraGrab(CBaslerUniversalInstantCamera& camera) {
             cout << "SizeX: " << ptrGrabResult->GetWidth() << endl;
             cout << "SizeY: " << ptrGrabResult->GetHeight() << endl;
             const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult->GetBuffer();
-            cout << "Gray value of first pixel: " << (uint32_t)pImageBuffer[0] << endl << endl;
+            cout << "Gray value of 90 pixel: " << (uint32_t)pImageBuffer[90] << endl << endl;
             // Display the grabbed image.
-            Pylon::DisplayImage(1, ptrGrabResult);
+            Pylon::DisplayImage(0, ptrGrabResult);
         }
         else
         {
@@ -108,10 +115,44 @@ int main(int argc, char* argv[])
         right_camera.ExposureTimeRaw.SetValue(15000);
         left_camera.ExposureTimeRaw.SetValue(15000);
 
-        BaslerCameraGrab(right_camera, c_countOfImagesToGrab);
-        BaslerCameraGrab(left_camera, c_countOfImagesToGrab);
-
+        //BaslerCameraGrab(right_camera, c_countOfImagesToGrab);
+        //BaslerCameraGrab(left_camera, c_countOfImagesToGrab);
         cout << left_camera.ExposureTimeRaw.GetValue() << "     " << right_camera.ExposureTimeRaw.GetValue() << endl;
+
+        CImageFormatConverter image_converter;
+        image_converter.OutputPixelFormat = PixelType_BGR8packed;
+
+        CPylonImage pylon_img;
+
+        right_camera.StartGrabbing();
+        CGrabResultPtr ptrGrabResult;
+        for (uint32_t i = 0; right_camera.IsGrabbing() && i <= c_countOfImagesToGrab; ++i)
+        {
+            // Wait for an image and then retrieve it. A timeout of 5000 ms is used.
+            right_camera.RetrieveResult(5000, ptrGrabResult, TimeoutHandling_ThrowException);
+            // Image grabbed successfully?
+            if (ptrGrabResult->GrabSucceeded())
+            {
+                // Access the image data.
+                cout << "SizeX: " << ptrGrabResult->GetWidth() << endl;
+                cout << "SizeY: " << ptrGrabResult->GetHeight() << endl;
+                const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult->GetBuffer();
+                //cout << "Gray value of first pixel: " << (uint32_t)pImageBuffer[0] << endl << endl;
+                // Display the grabbed image.
+                Pylon::DisplayImage(0, ptrGrabResult);
+                image_converter.Convert(pylon_img, ptrGrabResult);
+                cout << " here some shit" << endl;
+                cv::Mat opencv_image(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3 , (uint8_t*)pylon_img.GetBuffer());
+                cout << "it works" << endl;
+                cv::namedWindow("open cv window", CV_WINDOW_NORMAL);
+                cv::imshow("open cv window", opencv_image);
+                cv::waitKey(1);
+            }
+            else
+            {
+                cout << "Error: " << ptrGrabResult->GetErrorCode() << " " << ptrGrabResult->GetErrorDescription() << endl;
+            }
+        }
 
     }
     catch (const GenericException& e)
