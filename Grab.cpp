@@ -244,11 +244,21 @@ int main(int argc, char* argv[])
                 image_converter.Convert(pylon_img_right, ptrGrabResult_right);
                 image_converter.Convert(pylon_img_left, ptrGrabResult_left);
                 //show opencv images
-                cv::Mat opencv_image_right(ptrGrabResult_right->GetHeight(), ptrGrabResult_right->GetWidth(), CV_8UC3 , (uint8_t*)pylon_img_right.GetBuffer());
+                cv::Mat opencv_image_right(ptrGrabResult_right->GetHeight(), ptrGrabResult_right->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_right.GetBuffer());
                 cv::Mat opencv_image_left(ptrGrabResult_left->GetHeight(), ptrGrabResult_left->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_left.GetBuffer());
+                Mat left_img, right_img;
+                cout << ptrGrabResult_left->GetWidth() << "  " << ptrGrabResult_left->GetHeight() << " open cvcvcvc" << opencv_image_left.cols << "   " << opencv_image_left.rows << endl;
                 cv::imshow("open cv window right", opencv_image_right);
                 cv::imshow("open cv window left", opencv_image_left);
+                cv::cvtColor(opencv_image_left, left_img, CV_BGR2GRAY);
+                cv::cvtColor(opencv_image_right, right_img, CV_BGR2GRAY);
+                cv::imshow("uuuuuu", left_img);
 
+                Mat result_sgbm, sb_8;
+                cv::Ptr<cv::StereoBM> sgbm_matcher = cv::StereoBM::create(160, 21);
+                sgbm_matcher->compute(left_img, right_img, result_sgbm);
+                cv::normalize(result_sgbm, sb_8, 0, 255, CV_MINMAX, CV_8U);
+                cv::imshow("sklda;slkd", sb_8);
                 cv::waitKey(1);
                 cout << "let's wait" << i << endl;
                 //bool result_right = cv::findChessboardCorners(opencv_image, board_sz, corners_1);
