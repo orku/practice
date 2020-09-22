@@ -11,13 +11,19 @@
 #include<opencv2/video.hpp>
 #include<opencv2/core.hpp>
 #include <opencv2/core/hal/interface.h>
+#include<opencv2/imgproc/imgproc.hpp>
 #include "Grab.h"
 
 // Namespace for using pylon objects.
 using namespace Pylon;
 
 // Namespace for using cout.
-using namespace std;
+using std::cout;
+using std::endl;
+using std::vector;
+using std::cerr;
+using cv::Mat;
+
 
 // Number of images to be grabbed.
 static const uint32_t c_countOfImagesToGrab = 100;
@@ -163,16 +169,6 @@ bool get_chessboard_corners_stereo(vector<Mat> img_arr_left, vector<Mat> img_arr
 
 }
 
-
-// Limits the amount of cameras used for grabbing.
-// It is important to manage the available bandwidth when grabbing with multiple cameras.
-// This applies, for instance, if two GigE cameras are connected to the same network adapter via a switch.
-// To manage the bandwidth, the GevSCPD interpacket delay parameter and the GevSCFTD transmission delay
-// parameter can be set for each GigE camera device.
-// The "Controlling Packet Transmission Timing with the Interpacket and Frame Transmission Delays on Basler GigE Vision Cameras"
-// Application Notes (AW000649xx000)
-// provide more information about this topic.
-// The bandwidth used by a FireWire camera device can be limited by adjusting the packet size.
 static const size_t c_maxCamerasToUse = 2; 
 
 int main(int argc, char* argv[])
@@ -181,20 +177,13 @@ int main(int argc, char* argv[])
     int exitCode = 0;
     const size_t count_of_camers = 2;
     const float calibration_squar_edge_length = 0.03f; // in meters
-    const cv::Size_<int> board_sz = cv::Size(7, 5);
+    const cv::Size board_sz(7, 5);
     std::vector<cv::Point2f > corners_1, corners_2;
     std::vector<std::vector<cv::Point2f>> img_points_left, img_points_right;
     std::vector<cv::Point3f> object_corners;
     std::vector<std::vector<cv::Point3f>> object_points;
 
-    cout << " create_known_board_position " << endl;
-    for (int i = 0; i < board_sz.width; ++i) {
-        for (int j = 0; j < board_sz.height; ++j) {
-            //cout << i * calibration_squar_edge_length << ' ' << j * calibration_squar_edge_length << endl;
-            object_corners.push_back(cv::Point3f(i * calibration_squar_edge_length, j * calibration_squar_edge_length, 0.0f));
-        }
-    }
-
+    create_known_chessboadr_posiyion(object_corners, calibration_squar_edge_length, board_sz);
 
 
     // Before using any pylon methods, the pylon runtime must be initialized. 
@@ -230,49 +219,56 @@ int main(int argc, char* argv[])
         CImageFormatConverter image_converter;
         image_converter.OutputPixelFormat = PixelType_BGR8packed;
 
-        CPylonImage pylon_img;
-
-
+        CPylonImage pylon_img_right, pylon_img_left;
+        
         right_camera.StartGrabbing();
-        CGrabResultPtr ptrGrabResult;
-        for (uint32_t i = 0; right_camera.IsGrabbing() && i <= c_countOfImagesToGrab; ++i)
+        left_camera.StartGrabbing();
+        CGrabResultPtr ptrGrabResult_right;
+        CGrabResultPtr ptrGrabResult_left;
+
+        for (uint32_t i = 0; right_camera.IsGrabbing() && left_camera.IsGrabbing() &&i <= c_countOfImagesToGrab; ++i)
         {
             // Wait for an image and then retrieve it. A timeout of 5000 ms is used.
-            right_camera.RetrieveResult(5000, ptrGrabResult, TimeoutHandling_ThrowException);
+            right_camera.RetrieveResult(5000, ptrGrabResult_right, TimeoutHandling_ThrowException);
+            left_camera.RetrieveResult(5000, ptrGrabResult_left, TimeoutHandling_ThrowException);
             // Image grabbed successfully?
-            if (ptrGrabResult->GrabSucceeded())
+            if (ptrGrabResult_right->GrabSucceeded() && ptrGrabResult_left->GrabSucceeded())
             {
                 // Access the image data.
-                cout << "SizeX: " << ptrGrabResult->GetWidth() << endl;
-                cout << "SizeY: " << ptrGrabResult->GetHeight() << endl;
-                const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult->GetBuffer();
-                //cout << "Gray value of first pixel: " << (uint32_t)pImageBuffer[0] << endl << endl;
-                // Display the grabbed image.
-                Pylon::DisplayImage(0, ptrGrabResult);
-                image_converter.Convert(pylon_img, ptrGrabResult);
-                cout << " here some shit" << endl;
-                cv::Mat opencv_image(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC3 , (uint8_t*)pylon_img.GetBuffer());
-                cout << "it works" << endl;
-                cv::namedWindow("open cv window", CV_WINDOW_NORMAL);
-                cv::imshow("open cv window", opencv_image);
+                cout << "we grab it" << endl;
+                //const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult_right->GetBuffer();
+                //show pylon images
+                Pylon::DisplayImage(0, ptrGrabResult_right);
+                Pylon::DisplayImage(1, ptrGrabResult_left);
+
+                image_converter.Convert(pylon_img_right, ptrGrabResult_right);
+                image_converter.Convert(pylon_img_left, ptrGrabResult_left);
+                //show opencv images
+                cv::Mat opencv_image_right(ptrGrabResult_right->GetHeight(), ptrGrabResult_right->GetWidth(), CV_8UC3 , (uint8_t*)pylon_img_right.GetBuffer());
+                cv::Mat opencv_image_left(ptrGrabResult_left->GetHeight(), ptrGrabResult_left->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_left.GetBuffer());
+                cv::imshow("open cv window right", opencv_image_right);
+                cv::imshow("open cv window left", opencv_image_left);
+
                 cv::waitKey(1);
-                cout << "let's wait" << endl;
-                bool result_right = cv::findChessboardCorners(opencv_image, board_sz, corners_1);
-                if (result_right) {
-                    cv::Mat opencv_image_with_corners(opencv_image);
-                    cv::drawChessboardCorners(opencv_image_with_corners, board_sz, corners_1, result_right);
-                    cv::imshow("with corners", opencv_image);
-                    cv::waitKey(100000);
-                    cout << "we find it" << endl;
-                }
+                cout << "let's wait" << i << endl;
+                //bool result_right = cv::findChessboardCorners(opencv_image, board_sz, corners_1);
+                //cout << "result: " << result_right << "  " << i << endl;
+                //if (result_right) {
+                //    cv::Mat opencv_image_with_corners(opencv_image);
+                //    cv::drawChessboardCorners(opencv_image_with_corners, board_sz, corners_1, result_right);
+                //    cv::imshow("with corners", opencv_image);
+                //    cv::waitKey(200);
+                //}
+
 
             }
             else
             {
-                cout << "Error: " << ptrGrabResult->GetErrorCode() << " " << ptrGrabResult->GetErrorDescription() << endl;
+                cout << "Error: " << ptrGrabResult_right->GetErrorCode() << " " << ptrGrabResult_right->GetErrorDescription() << endl;
             }
         }
-
+        right_camera.Close();
+        left_camera.Close();
     }
     catch (const GenericException& e)
     {
@@ -284,8 +280,7 @@ int main(int argc, char* argv[])
 
     // Comment the following two lines to disable waiting on exit.
     cerr << endl << "Press enter to exit." << endl;
-    while (cin.get() != '\n');
-
+    while (std::cin.get() != '\n');
     // Releases all pylon resources. 
     PylonTerminate();
 
