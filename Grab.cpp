@@ -26,7 +26,7 @@ using cv::Mat;
 
 
 // Number of images to be grabbed.
-static const uint32_t c_countOfImagesToGrab = 100;
+static const uint32_t c_countOfImagesToGrab = 500;
 
 void BaslerCameraGrab(CBaslerUniversalInstantCamera& camera, static const uint32_t c_countOfImagesToGrab){
     camera.StartGrabbing();
@@ -86,8 +86,9 @@ void create_array_of_images(std::ifstream& file, int count_of_images, vector<Mat
             char string[20];
             file.getline(string, 20, '\n');
             cout << string << i << endl;
-            img_array.push_back(cv::imread(string, CV_8UC3));
+            img_array.push_back(cv::imread(string, CV_LOAD_IMAGE_UNCHANGED));
         }
+        file.close();
     }
     else
     {
@@ -116,7 +117,7 @@ int get_chessboard_corners(vector<Mat> img_arr, vector<vector<cv::Point2f>>& fou
             ++count_of_foud_patterns;
             found_coreners.push_back(bufffer);
             cv::drawChessboardCorners(*i, board_sz, bufffer, result);
-            cv::imshow("sds", *i);
+            cv::imshow("CHESSBOARD", *i);
             cv::waitKey(200);
         }
         else
@@ -127,35 +128,57 @@ int get_chessboard_corners(vector<Mat> img_arr, vector<vector<cv::Point2f>>& fou
     return count_of_foud_patterns;
 }
 
-int get_chessboard_corners(vector<Mat> img_arr, vector<vector<cv::Point2f>>& found_coreners, cv::Size board_sz, int success_cases) {
-    int count_of_foud_patterns = 0;
-    while (count_of_foud_patterns != success_cases)
+size_t get_chessboard_corners(vector<Mat> img_arr, vector<vector<cv::Point2f>>& found_coreners, vector<vector<cv::Point3f>>& obj_points, vector<cv::Point3f> obj_corners, cv::Size board_sz, size_t success_cases) {
+    while (img_arr.size() != success_cases)
     {
-        for (vector<Mat>::iterator i = img_arr.begin(); i != img_arr.end() && count_of_foud_patterns != success_cases; i++)
+        for (size_t i = 0; i != success_cases; i++)
         {
             vector<cv::Point2f> bufffer;
-            bool result = cv::findChessboardCorners(*i, board_sz, bufffer);
+            bool result = cv::findChessboardCorners(img_arr[i], board_sz, bufffer);
             if (result)
             {
-                ++count_of_foud_patterns;
                 found_coreners.push_back(bufffer);
-                cv::drawChessboardCorners(*i, board_sz, bufffer, result);
-                cv::imshow("sds", *i);
-                cv::waitKey(200);
+                obj_points.push_back(obj_corners);
+                cv::drawChessboardCorners(img_arr[i], board_sz, bufffer, result);
+                cv::imshow("CHESSBOARD", img_arr[i]);
+                cv::waitKey(50);
             }
             else
             {
                 cout << "can not find chessboard" << endl;
             }
         }
-        return count_of_foud_patterns;
+        return img_arr.size();
     }
 }
 
-bool get_chessboard_corners_stereo(vector<Mat> img_arr_left, vector<Mat> img_arr_right, vector<vector<cv::Point2f>>& found_coreners_left,
-    vector<vector<cv::Point2f>>& found_coreners_right, cv::Size board_sz, int success_cases_) {
-    int success_cases_left = get_chessboard_corners(img_arr_left, found_coreners_left, board_sz, success_cases_);
-    int success_cases_right = get_chessboard_corners(img_arr_right, found_coreners_right, board_sz, success_cases_);
+size_t get_chessboard_corners(vector<Mat> img_arr, vector<vector<cv::Point2f>>& found_coreners, cv::Size board_sz, size_t success_cases) {
+    while (img_arr.size() != success_cases)
+    {
+        for (size_t i = 0; i != success_cases; i++)
+        {
+            vector<cv::Point2f> bufffer;
+            bool result = cv::findChessboardCorners(img_arr[i], board_sz, bufffer);
+            if (result)
+            {
+                found_coreners.push_back(bufffer);
+                cv::drawChessboardCorners(img_arr[i], board_sz, bufffer, result);
+                cv::imshow("CHESSBOARD", img_arr[i]);
+                cv::waitKey(50);
+            }
+            else
+            {
+                cout << "can not find chessboard" << endl;
+            }
+        }
+        return img_arr.size();
+    }
+}
+
+bool get_chessboard_corners(vector<Mat> img_arr_left, vector<Mat> img_arr_right, vector<vector<cv::Point2f>>& found_coreners_left,
+    vector<vector<cv::Point2f>>& found_coreners_right, vector<vector<cv::Point3f>>& obj_points, vector <cv::Point3f> obj_corners, cv::Size board_sz, size_t success_cases_) {
+    size_t success_cases_left = get_chessboard_corners(img_arr_left, found_coreners_left,obj_points, obj_corners, board_sz, success_cases_);
+    size_t success_cases_right = get_chessboard_corners(img_arr_right, found_coreners_right, board_sz, success_cases_ - 1);
     if (success_cases_right == success_cases_left)
     {
         cout << "All nice!" << endl;
@@ -163,7 +186,7 @@ bool get_chessboard_corners_stereo(vector<Mat> img_arr_left, vector<Mat> img_arr
     }
     else
     {
-        cout << " Something get wrong" << endl;
+        cerr << " Something get wrong" << endl;
         return false;
     }
 
@@ -173,126 +196,154 @@ static const size_t c_maxCamerasToUse = 2;
 
 int main(int argc, char* argv[])
 {
-    // The exit code of the sample application.
     int exitCode = 0;
     const size_t count_of_camers = 2;
     const float calibration_squar_edge_length = 0.03f; // in meters
     const cv::Size board_sz(7, 5);
-    std::vector<cv::Point2f > corners_1, corners_2;
-    std::vector<std::vector<cv::Point2f>> img_points_left, img_points_right;
-    std::vector<cv::Point3f> object_corners;
-    std::vector<std::vector<cv::Point3f>> object_points;
+    const size_t success_cases = 5;
+    vector<cv::Point2f > corners_1, corners_2;
+    vector<vector<cv::Point2f>> img_points_left, img_points_right;
+    vector<cv::Point3f> object_corners;
+    vector<vector<cv::Point3f>> object_points;
+    vector<Mat> left_calibration_array, right_calibration_array;   
+    std::ifstream left_file, right_file;
+    left_file.open("left.txt");
+    right_file.open("right.txt");
+
+    create_array_of_images(left_file, 25, left_calibration_array);
+    create_array_of_images(right_file, 25, right_calibration_array);
 
     create_known_chessboadr_posiyion(object_corners, calibration_squar_edge_length, board_sz);
+    //get_chessboard_corners(left_calibration_array, right_calibration_array, img_points_left, img_points_right,
+    //    object_points, object_corners, board_sz, success_cases);
+    get_chessboard_corners(left_calibration_array, img_points_left, object_points, object_corners, board_sz, success_cases);
+    get_chessboard_corners(right_calibration_array, img_points_right, board_sz, success_cases);
+    cout << img_points_left.size() << "   " << img_points_right.size() << "   " << object_points.size() << endl;
+    Mat camera_matrix_right, dist_coefs_right, camera_matrix_left, dist_coefs_left, R, T, E, F;
+    cv::stereoCalibrate(object_points, img_points_left, img_points_right, camera_matrix_left, dist_coefs_left,
+        camera_matrix_right, dist_coefs_right, cv::Size(720, 576), R, T, E, F, cv::CALIB_RATIONAL_MODEL | cv::CALIB_FIX_PRINCIPAL_POINT);
 
+    cv::FileStorage fs1("out_file.xml", cv::FileStorage::WRITE);
 
-    // Before using any pylon methods, the pylon runtime must be initialized. 
-    PylonInitialize();
+    fs1 << "Matrix of left camera" << camera_matrix_left;
+    fs1 << "Matrix of right camera" << camera_matrix_right;
+    fs1 << "Distortion coefficients of left camera" << dist_coefs_left;
+    fs1 << "Distortion coefficients of right camera" << dist_coefs_right;
+    fs1 << "R" << R;
+    fs1 << "T" << T;
+    fs1 << "E" << E;
+    fs1 << "F" << F;
+    fs1.release();
 
-    try
-    {
-        CTlFactory& TlFactory = CTlFactory::GetInstance();
-        DeviceInfoList_t listDevices;
-        DeviceInfoList devices_list;
-        TlFactory.EnumerateDevices(devices_list);
-        if (devices_list.empty())
+    if (false) {// Before using any pylon methods, the pylon runtime must be initialized. 
+        PylonInitialize();
+
+        try
         {
-            cerr << "No devuce found!" << endl;
+            CTlFactory& TlFactory = CTlFactory::GetInstance();
+            DeviceInfoList_t listDevices;
+            DeviceInfoList devices_list;
+            TlFactory.EnumerateDevices(devices_list);
+            if (devices_list.empty())
+            {
+                cerr << "No devuce found!" << endl;
+            }
+
+            IPylonDevice* right_dev(TlFactory.CreateDevice(devices_list[0]));
+            IPylonDevice* left_dev(TlFactory.CreateDevice(devices_list[1]));
+
+            CBaslerUniversalInstantCamera right_camera(TlFactory.CreateDevice(devices_list[0]));
+            CBaslerUniversalInstantCamera left_camera(TlFactory.CreateDevice(devices_list[1]));
+            cout << right_camera.GetDeviceInfo().GetFullName() << "   " << left_camera.GetDeviceInfo().GetFullName() << endl;
+
+            right_camera.Open();
+            left_camera.Open();
+            right_camera.ExposureTimeRaw.SetValue(20000);
+            left_camera.ExposureTimeRaw.SetValue(20000);
+
+            //BaslerCameraGrab(right_camera, c_countOfImagesToGrab);
+            //BaslerCameraGrab(left_camera, c_countOfImagesToGrab);
+            cout << left_camera.ExposureTimeRaw.GetValue() << "     " << right_camera.ExposureTimeRaw.GetValue() << endl;
+
+            CImageFormatConverter image_converter;
+            image_converter.OutputPixelFormat = PixelType_BGR8packed;
+
+            CPylonImage pylon_img_right, pylon_img_left;
+
+            right_camera.StartGrabbing();
+            left_camera.StartGrabbing();
+            CGrabResultPtr ptrGrabResult_right;
+            CGrabResultPtr ptrGrabResult_left;
+
+            for (uint32_t i = 0; right_camera.IsGrabbing() && left_camera.IsGrabbing() && i <= c_countOfImagesToGrab; ++i)
+            {
+                // Wait for an image and then retrieve it. A timeout of 5000 ms is used.
+                right_camera.RetrieveResult(5000, ptrGrabResult_right, TimeoutHandling_ThrowException);
+                left_camera.RetrieveResult(5000, ptrGrabResult_left, TimeoutHandling_ThrowException);
+                // Image grabbed successfully?
+                if (ptrGrabResult_right->GrabSucceeded() && ptrGrabResult_left->GrabSucceeded())
+                {
+                    // Access the image data.
+                    cout << "we grab it" << endl;
+                    //const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult_right->GetBuffer();
+                    //show pylon images
+                    Pylon::DisplayImage(0, ptrGrabResult_right);
+                    Pylon::DisplayImage(1, ptrGrabResult_left);
+
+                    image_converter.Convert(pylon_img_right, ptrGrabResult_right);
+                    image_converter.Convert(pylon_img_left, ptrGrabResult_left);
+                    //show opencv images
+                    cv::Mat opencv_image_right(ptrGrabResult_right->GetHeight(), ptrGrabResult_right->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_right.GetBuffer());
+                    cv::Mat opencv_image_left(ptrGrabResult_left->GetHeight(), ptrGrabResult_left->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_left.GetBuffer());
+                    Mat left_img, right_img;
+                    cout << ptrGrabResult_left->GetWidth() << "  " << ptrGrabResult_left->GetHeight() << " open cvcvcvc" << opencv_image_left.cols << "   " << opencv_image_left.rows << endl;
+                    cv::imshow("open cv window right", opencv_image_right);
+                    cv::imshow("open cv window left", opencv_image_left);
+                    cv::cvtColor(opencv_image_left, left_img, CV_BGR2GRAY);
+                    cv::cvtColor(opencv_image_right, right_img, CV_BGR2GRAY);
+                    cv::imshow("uuuuuu", left_img);
+
+                    Mat result_sgbm, sb_8;
+                    cv::Ptr<cv::StereoBM> sgbm_matcher = cv::StereoBM::create(160, 21);
+                    sgbm_matcher->compute(left_img, right_img, result_sgbm);
+                    cv::normalize(result_sgbm, sb_8, 0, 255, CV_MINMAX, CV_8U);
+                    cv::imshow("sklda;slkd", sb_8);
+                    cv::waitKey(1);
+                    cout << "let's wait" << i << endl;
+                    //bool result_right = cv::findChessboardCorners(opencv_image, board_sz, corners_1);
+                    //cout << "result: " << result_right << "  " << i << endl;
+                    //if (result_right) {
+                    //    cv::Mat opencv_image_with_corners(opencv_image);
+                    //    cv::drawChessboardCorners(opencv_image_with_corners, board_sz, corners_1, result_right);
+                    //    cv::imshow("with corners", opencv_image);
+                    //    cv::waitKey(200);
+                    //}
+
+
+                }
+                else
+                {
+                    cout << "Error: " << ptrGrabResult_right->GetErrorCode() << " " << ptrGrabResult_right->GetErrorDescription() << endl;
+                }
+            }
+            right_camera.Close();
+            left_camera.Close();
+        }
+        catch (const GenericException& e)
+        {
+            // Error handling
+            cerr << "An exception occurred." << endl
+                << e.GetDescription() << endl;
+            exitCode = 1;
         }
 
-        IPylonDevice* right_dev(TlFactory.CreateDevice(devices_list[0]));
-        IPylonDevice* left_dev(TlFactory.CreateDevice(devices_list[1]));
-
-        CBaslerUniversalInstantCamera right_camera(TlFactory.CreateDevice(devices_list[0]));
-        CBaslerUniversalInstantCamera left_camera(TlFactory.CreateDevice(devices_list[1]));
-        cout << right_camera.GetDeviceInfo().GetFullName() << "   " << left_camera.GetDeviceInfo().GetFullName() << endl;
-        
-        right_camera.Open();
-        left_camera.Open();
-        right_camera.ExposureTimeRaw.SetValue(15000);
-        left_camera.ExposureTimeRaw.SetValue(15000);
-
-        //BaslerCameraGrab(right_camera, c_countOfImagesToGrab);
-        //BaslerCameraGrab(left_camera, c_countOfImagesToGrab);
-        cout << left_camera.ExposureTimeRaw.GetValue() << "     " << right_camera.ExposureTimeRaw.GetValue() << endl;
-
-        CImageFormatConverter image_converter;
-        image_converter.OutputPixelFormat = PixelType_BGR8packed;
-
-        CPylonImage pylon_img_right, pylon_img_left;
-        
-        right_camera.StartGrabbing();
-        left_camera.StartGrabbing();
-        CGrabResultPtr ptrGrabResult_right;
-        CGrabResultPtr ptrGrabResult_left;
-
-        for (uint32_t i = 0; right_camera.IsGrabbing() && left_camera.IsGrabbing() &&i <= c_countOfImagesToGrab; ++i)
-        {
-            // Wait for an image and then retrieve it. A timeout of 5000 ms is used.
-            right_camera.RetrieveResult(5000, ptrGrabResult_right, TimeoutHandling_ThrowException);
-            left_camera.RetrieveResult(5000, ptrGrabResult_left, TimeoutHandling_ThrowException);
-            // Image grabbed successfully?
-            if (ptrGrabResult_right->GrabSucceeded() && ptrGrabResult_left->GrabSucceeded())
-            {
-                // Access the image data.
-                cout << "we grab it" << endl;
-                //const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult_right->GetBuffer();
-                //show pylon images
-                Pylon::DisplayImage(0, ptrGrabResult_right);
-                Pylon::DisplayImage(1, ptrGrabResult_left);
-
-                image_converter.Convert(pylon_img_right, ptrGrabResult_right);
-                image_converter.Convert(pylon_img_left, ptrGrabResult_left);
-                //show opencv images
-                cv::Mat opencv_image_right(ptrGrabResult_right->GetHeight(), ptrGrabResult_right->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_right.GetBuffer());
-                cv::Mat opencv_image_left(ptrGrabResult_left->GetHeight(), ptrGrabResult_left->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_left.GetBuffer());
-                Mat left_img, right_img;
-                cout << ptrGrabResult_left->GetWidth() << "  " << ptrGrabResult_left->GetHeight() << " open cvcvcvc" << opencv_image_left.cols << "   " << opencv_image_left.rows << endl;
-                cv::imshow("open cv window right", opencv_image_right);
-                cv::imshow("open cv window left", opencv_image_left);
-                cv::cvtColor(opencv_image_left, left_img, CV_BGR2GRAY);
-                cv::cvtColor(opencv_image_right, right_img, CV_BGR2GRAY);
-                cv::imshow("uuuuuu", left_img);
-
-                Mat result_sgbm, sb_8;
-                cv::Ptr<cv::StereoBM> sgbm_matcher = cv::StereoBM::create(160, 21);
-                sgbm_matcher->compute(left_img, right_img, result_sgbm);
-                cv::normalize(result_sgbm, sb_8, 0, 255, CV_MINMAX, CV_8U);
-                cv::imshow("sklda;slkd", sb_8);
-                cv::waitKey(1);
-                cout << "let's wait" << i << endl;
-                //bool result_right = cv::findChessboardCorners(opencv_image, board_sz, corners_1);
-                //cout << "result: " << result_right << "  " << i << endl;
-                //if (result_right) {
-                //    cv::Mat opencv_image_with_corners(opencv_image);
-                //    cv::drawChessboardCorners(opencv_image_with_corners, board_sz, corners_1, result_right);
-                //    cv::imshow("with corners", opencv_image);
-                //    cv::waitKey(200);
-                //}
-
-
-            }
-            else
-            {
-                cout << "Error: " << ptrGrabResult_right->GetErrorCode() << " " << ptrGrabResult_right->GetErrorDescription() << endl;
-            }
-        }
-        right_camera.Close();
-        left_camera.Close();
-    }
-    catch (const GenericException& e)
-    {
-        // Error handling
-        cerr << "An exception occurred." << endl
-            << e.GetDescription() << endl;
-        exitCode = 1;
     }
 
     // Comment the following two lines to disable waiting on exit.
     cerr << endl << "Press enter to exit." << endl;
     while (std::cin.get() != '\n');
     // Releases all pylon resources. 
-    PylonTerminate();
+    //PylonTerminate();
 
     return exitCode;
 }
