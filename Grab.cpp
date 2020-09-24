@@ -25,8 +25,7 @@ using std::cerr;
 using cv::Mat;
 
 
-// Number of images to be grabbed.
-static const uint32_t c_countOfImagesToGrab = 500;
+
 
 void BaslerCameraGrab(CBaslerUniversalInstantCamera& camera, static const uint32_t c_countOfImagesToGrab){
     camera.StartGrabbing();
@@ -129,7 +128,7 @@ int get_chessboard_corners(vector<Mat> img_arr, vector<vector<cv::Point2f>>& fou
 }
 
 size_t get_chessboard_corners(vector<Mat> img_arr, vector<vector<cv::Point2f>>& found_coreners, vector<vector<cv::Point3f>>& obj_points, vector<cv::Point3f> obj_corners, cv::Size board_sz, size_t success_cases) {
-    while (img_arr.size() != success_cases)
+    while (found_coreners.size() != success_cases)
     {
         for (size_t i = 0; i != success_cases; i++)
         {
@@ -148,12 +147,12 @@ size_t get_chessboard_corners(vector<Mat> img_arr, vector<vector<cv::Point2f>>& 
                 cout << "can not find chessboard" << endl;
             }
         }
-        return img_arr.size();
+        return found_coreners.size();
     }
 }
 
 size_t get_chessboard_corners(vector<Mat> img_arr, vector<vector<cv::Point2f>>& found_coreners, cv::Size board_sz, size_t success_cases) {
-    while (img_arr.size() != success_cases)
+    while (found_coreners.size() != success_cases)
     {
         for (size_t i = 0; i != success_cases; i++)
         {
@@ -171,7 +170,7 @@ size_t get_chessboard_corners(vector<Mat> img_arr, vector<vector<cv::Point2f>>& 
                 cout << "can not find chessboard" << endl;
             }
         }
-        return img_arr.size();
+        return found_coreners.size();
     }
 }
 
@@ -193,14 +192,19 @@ bool get_chessboard_corners(vector<Mat> img_arr_left, vector<Mat> img_arr_right,
 }
 
 static const size_t c_maxCamerasToUse = 2; 
+// Number of images to be grabbed.
+static const uint32_t c_countOfImagesToGrab = 100;
 
 int main(int argc, char* argv[])
 {
+    int max_disp = 160;
+    int window_size = 3;
     int exitCode = 0;
     const size_t count_of_camers = 2;
     const float calibration_squar_edge_length = 0.03f; // in meters
     const cv::Size board_sz(7, 5);
     const size_t success_cases = 5;
+    cv::Size image_size(720, 576);  
     vector<cv::Point2f > corners_1, corners_2;
     vector<vector<cv::Point2f>> img_points_left, img_points_right;
     vector<cv::Point3f> object_corners;
@@ -223,19 +227,18 @@ int main(int argc, char* argv[])
     cv::stereoCalibrate(object_points, img_points_left, img_points_right, camera_matrix_left, dist_coefs_left,
         camera_matrix_right, dist_coefs_right, cv::Size(720, 576), R, T, E, F, cv::CALIB_RATIONAL_MODEL | cv::CALIB_FIX_PRINCIPAL_POINT);
 
-    cv::FileStorage fs1("out_file.xml", cv::FileStorage::WRITE);
+    Mat R1, R2, P1, P2, map11, map12, map21, map22, new_camera_matrix_left, new_camera_matrix_right;
 
-    fs1 << "Matrix of left camera" << camera_matrix_left;
-    fs1 << "Matrix of right camera" << camera_matrix_right;
-    fs1 << "Distortion coefficients of left camera" << dist_coefs_left;
-    fs1 << "Distortion coefficients of right camera" << dist_coefs_right;
-    fs1 << "R" << R;
-    fs1 << "T" << T;
-    fs1 << "E" << E;
-    fs1 << "F" << F;
-    fs1.release();
+    cv::stereoRectify(camera_matrix_left, dist_coefs_left, camera_matrix_right, dist_coefs_right, cv::Size(720, 576), R, T, R1, R2, P1, P2, cv::noArray());
 
-    if (false) {// Before using any pylon methods, the pylon runtime must be initialized. 
+    cv::initUndistortRectifyMap(camera_matrix_left, dist_coefs_left, R1, P1, image_size, CV_16SC2, map11, map12);
+    cv::initUndistortRectifyMap(camera_matrix_right, dist_coefs_right, R2, P2, image_size, CV_16SC2, map21, map22);
+
+    cv::initUndistortRectifyMap(camera_matrix_left, dist_coefs_left, R1, new_camera_matrix_left, image_size, CV_16SC2, map11, map12);
+    cv::initUndistortRectifyMap(camera_matrix_right, dist_coefs_right, R2, new_camera_matrix_right, image_size, CV_16SC2, map21, map22);
+
+
+    //if (false) {// Before using any pylon methods, the pylon runtime must be initialized. 
         PylonInitialize();
 
         try
@@ -287,8 +290,8 @@ int main(int argc, char* argv[])
                     cout << "we grab it" << endl;
                     //const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult_right->GetBuffer();
                     //show pylon images
-                    Pylon::DisplayImage(0, ptrGrabResult_right);
-                    Pylon::DisplayImage(1, ptrGrabResult_left);
+                    //Pylon::DisplayImage(0, ptrGrabResult_right);
+                    //Pylon::DisplayImage(1, ptrGrabResult_left);
 
                     image_converter.Convert(pylon_img_right, ptrGrabResult_right);
                     image_converter.Convert(pylon_img_left, ptrGrabResult_left);
@@ -296,36 +299,37 @@ int main(int argc, char* argv[])
                     cv::Mat opencv_image_right(ptrGrabResult_right->GetHeight(), ptrGrabResult_right->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_right.GetBuffer());
                     cv::Mat opencv_image_left(ptrGrabResult_left->GetHeight(), ptrGrabResult_left->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_left.GetBuffer());
                     Mat left_img, right_img;
-                    cout << ptrGrabResult_left->GetWidth() << "  " << ptrGrabResult_left->GetHeight() << " open cvcvcvc" << opencv_image_left.cols << "   " << opencv_image_left.rows << endl;
+                    cout << ptrGrabResult_left->GetWidth() << "  " << ptrGrabResult_left->GetHeight() << " open cv" << opencv_image_left.cols << "   " << opencv_image_left.rows << endl;
                     cv::imshow("open cv window right", opencv_image_right);
                     cv::imshow("open cv window left", opencv_image_left);
                     cv::cvtColor(opencv_image_left, left_img, CV_BGR2GRAY);
                     cv::cvtColor(opencv_image_right, right_img, CV_BGR2GRAY);
-                    cv::imshow("uuuuuu", left_img);
+                    cv::imshow("open cv converted img", left_img);
 
                     Mat result_sgbm, sb_8;
-                    cv::Ptr<cv::StereoBM> sgbm_matcher = cv::StereoBM::create(160, 21);
+                    cv::Ptr<cv::StereoBM> sgbm_matcher = cv::StereoBM::create(max_disp, 21);
+                    sgbm_matcher->setTextureThreshold(0);
+                    sgbm_matcher->setUniquenessRatio(0);
+                    //cv::Ptr<cv::StereoSGBM> sgbm_matcher = cv::StereoSGBM::create(0, max_disp, window_size);
+                    //sgbm_matcher->setP1(24*window_size*window_size);
+                    //sgbm_matcher->setP2(96*window_size*window_size);
+                    //sgbm_matcher->setPreFilterCap(63);
+                    //sgbm_matcher->setMode(cv::StereoSGBM::MODE_SGBM_3WAY);
+                    //Mat opencv_image_right_r, opencv_image_left_r;
+                    //cv::remap(left_img, opencv_image_right_r, map21, map22, cv::INTER_LINEAR);
+                    //cv::remap(right_img, opencv_image_left_r, map11, map12, cv::INTER_LINEAR);
+                    //cv::imshow("remap img ", opencv_image_left_r);
                     sgbm_matcher->compute(left_img, right_img, result_sgbm);
+                    //sgbm_matcher->compute(opencv_image_right_r, opencv_image_left_r, result_sgbm);
                     cv::normalize(result_sgbm, sb_8, 0, 255, CV_MINMAX, CV_8U);
-                    cv::imshow("sklda;slkd", sb_8);
+                    cv::imshow("dispariry map ", sb_8);
                     cv::waitKey(1);
-                    cout << "let's wait" << i << endl;
-                    //bool result_right = cv::findChessboardCorners(opencv_image, board_sz, corners_1);
-                    //cout << "result: " << result_right << "  " << i << endl;
-                    //if (result_right) {
-                    //    cv::Mat opencv_image_with_corners(opencv_image);
-                    //    cv::drawChessboardCorners(opencv_image_with_corners, board_sz, corners_1, result_right);
-                    //    cv::imshow("with corners", opencv_image);
-                    //    cv::waitKey(200);
-                    //}
-
-
                 }
                 else
                 {
                     cout << "Error: " << ptrGrabResult_right->GetErrorCode() << " " << ptrGrabResult_right->GetErrorDescription() << endl;
                 }
-            }
+            }   
             right_camera.Close();
             left_camera.Close();
         }
@@ -337,13 +341,13 @@ int main(int argc, char* argv[])
             exitCode = 1;
         }
 
-    }
+    //}
 
     // Comment the following two lines to disable waiting on exit.
     cerr << endl << "Press enter to exit." << endl;
     while (std::cin.get() != '\n');
     // Releases all pylon resources. 
-    //PylonTerminate();
+    PylonTerminate();
 
     return exitCode;
 }
