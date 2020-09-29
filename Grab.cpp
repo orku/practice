@@ -187,7 +187,6 @@ bool get_chessboard_corners(vector<Mat> img_arr_left, vector<Mat> img_arr_right,
         cerr << "Nmber of images not euqal number of aray of chessboar points" << endl;
         return false;
     }
-
 }
 
 static const size_t c_maxCamerasToUse = 2; 
@@ -217,8 +216,6 @@ int main(int argc, char* argv[])
     create_array_of_images(right_file, 5, right_calibration_array);
 
     create_known_chessboadr_posiyion(object_corners, calibration_squar_edge_length, board_sz);
-    //get_chessboard_corners(left_calibration_array, right_calibration_array, img_points_left, img_points_right,
-    //    object_points, object_corners, board_sz, success_cases);
     get_chessboard_corners(left_calibration_array, img_points_left, object_points, object_corners, board_sz, success_cases);
     get_chessboard_corners(right_calibration_array, img_points_right, board_sz, success_cases);
     cout << "number of left images in array  " << img_points_left.size() << " number of right images in array " << img_points_right.size()
@@ -227,51 +224,15 @@ int main(int argc, char* argv[])
     cv::stereoCalibrate(object_points, img_points_left, img_points_right, camera_matrix_left, dist_coefs_left,
         camera_matrix_right, dist_coefs_right, cv::Size(720, 576), R, T, E, F, cv::CALIB_RATIONAL_MODEL | cv::CALIB_FIX_PRINCIPAL_POINT);
 
-    Mat undistort_right, undistort_left, left_cam_matr, left_dist, undis_l;
-
-    cv::calibrateCamera(object_points, img_points_left, image_size, left_cam_matr, left_dist, cv::noArray(), cv::noArray());
-    
-    cv::undistort(left_calibration_array[2], undistort_left, camera_matrix_left, dist_coefs_left, cv::noArray());
-    cv::undistort(left_calibration_array[2], undis_l, left_cam_matr, left_dist, cv::noArray());
-    cv::undistort(right_calibration_array[2], undistort_right, camera_matrix_right, dist_coefs_right, cv::noArray());
-    cv::imshow("undistorted left", undistort_left);
-    cv::imshow("undistorted kkbkbn", undis_l);
-    cv::waitKey(300);
-
-
-
-    cv::Ptr<cv::StereoBM> sgbm_matcher = cv::StereoBM::create(max_disp, 21);
-    sgbm_matcher->setTextureThreshold(0);
-    sgbm_matcher->setUniquenessRatio(0);
+    cv::Ptr<cv::StereoBM> bm_matcher = cv::StereoBM::create(max_disp, 21);
+    bm_matcher->setTextureThreshold(0);
+    bm_matcher->setUniquenessRatio(0);
+    //it for StereoSGBM matching algorithm 
     //cv::Ptr<cv::StereoSGBM> sgbm_matcher = cv::StereoSGBM::create(0, max_disp, window_size);
     //sgbm_matcher->setP1(24 * window_size * window_size);
     //sgbm_matcher->setP2(96 * window_size * window_size);
     //sgbm_matcher->setPreFilterCap(63);
     //sgbm_matcher->setMode(cv::StereoSGBM::MODE_SGBM_3WAY);
-
-    //Mat R1, R2, P1, P2, map11, map12, map21, map22, new_camera_matrix_left, new_camera_matrix_right, Q, left_r, right_r, disp, norm_disp;
-
-    //cv::stereoRectify(camera_matrix_left, dist_coefs_left, camera_matrix_right, dist_coefs_right, cv::Size(720, 576), R, T, R1, R2, P1, P2, Q);
-
-    //cv::initUndistortRectifyMap(camera_matrix_left, dist_coefs_left, R1, P1, image_size, CV_16SC2, map11, map12);
-    //cv::initUndistortRectifyMap(camera_matrix_right, dist_coefs_right, R2, P2, image_size, CV_16SC2, map21, map22);
-
-    //cv::initUndistortRectifyMap(camera_matrix_left, dist_coefs_left, R1, new_camera_matrix_left, image_size, CV_16SC2, map11, map12);
-    //cv::initUndistortRectifyMap(camera_matrix_right, dist_coefs_right, R2, new_camera_matrix_right, image_size, CV_16SC2, map21, map22);
-    Mat left_lines, right_lines;
-    cv::computeCorrespondEpilines(img_points_left, 1, F, left_lines);
-    cv::computeCorrespondEpilines(img_points_right, 2, F, right_lines);
-    //for (size_t i = 0; i < left_lines.size(); i++)
-    //{
-    //    cout << left_lines[i];
-    //}
-    cv::imshow("ksdjkasj", left_lines);
-
-    //for (size_t i = 0; i < left_calibration_array.size() && i < right_calibration_array.size(); i++)
-    //{
-
-    //    cv::waitKey(200);
-    //}
 
     if (false) {// Before using any pylon methods, the pylon runtime must be initialized. 
         PylonInitialize();
@@ -299,8 +260,6 @@ int main(int argc, char* argv[])
             right_camera.ExposureTimeRaw.SetValue(20000);
             left_camera.ExposureTimeRaw.SetValue(20000);
 
-            //BaslerCameraGrab(right_camera, c_countOfImagesToGrab);
-            //BaslerCameraGrab(left_camera, c_countOfImagesToGrab);
             cout << left_camera.ExposureTimeRaw.GetValue() << "     " << right_camera.ExposureTimeRaw.GetValue() << endl;
 
             CImageFormatConverter image_converter;
@@ -323,30 +282,27 @@ int main(int argc, char* argv[])
                 {
                     // Access the image data.
                     cout << "we grab it" << endl;
-                    //const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult_right->GetBuffer();
+                    const uint8_t* pImageBuffer = (uint8_t*)ptrGrabResult_right->GetBuffer();
                     //show pylon images
                     //Pylon::DisplayImage(0, ptrGrabResult_right);
                     //Pylon::DisplayImage(1, ptrGrabResult_left);
 
                     image_converter.Convert(pylon_img_right, ptrGrabResult_right);
                     image_converter.Convert(pylon_img_left, ptrGrabResult_left);
-                    //show opencv images
+                    //convert opencv image to pylon image
                     cv::Mat opencv_image_right(ptrGrabResult_right->GetHeight(), ptrGrabResult_right->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_right.GetBuffer());
                     cv::Mat opencv_image_left(ptrGrabResult_left->GetHeight(), ptrGrabResult_left->GetWidth(), CV_8UC3, (uint8_t*)pylon_img_left.GetBuffer());
                     Mat left_img, right_img;
                     cout << ptrGrabResult_left->GetWidth() << "  " << ptrGrabResult_left->GetHeight() << " open cv" << opencv_image_left.cols << "   " << opencv_image_left.rows << endl;
                     cv::imshow("open cv window right", opencv_image_right);
                     cv::imshow("open cv window left", opencv_image_left);
+                    //covert to CV_8UC1
                     cv::cvtColor(opencv_image_left, left_img, CV_BGR2GRAY);
                     cv::cvtColor(opencv_image_right, right_img, CV_BGR2GRAY);
-                    cv::imshow("open cv converted img", left_img);
+                    cv::imshow("open cv left converted img", left_img);
 
-                    Mat result_sgbm, sb_8, sb_8_r;
-                    //Mat opencv_image_right_r, opencv_image_left_r, result_sgbm_r;
-                    //cv::remap(left_img, opencv_image_right_r, map21, map22, cv::INTER_LINEAR);
-                    //cv::remap(right_img, opencv_image_left_r, map11, map12, cv::INTER_LINEAR);
-                    //cv::imshow("remap img ", opencv_image_left_r);
-                    sgbm_matcher->compute(left_img, right_img, result_sgbm);
+                    Mat result_sgbm, sb_8;
+                    bm_matcher->compute(left_img, right_img, result_sgbm);
                     //sgbm_matcher->compute(opencv_image_right_r, opencv_image_left_r, result_sgbm_r);
                     cv::normalize(result_sgbm, sb_8, 0, 255, CV_MINMAX, CV_8U);
                     cv::imshow("dispariry map ", sb_8);
@@ -378,4 +334,3 @@ int main(int argc, char* argv[])
 
     return exitCode;
 }
-
