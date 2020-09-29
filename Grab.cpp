@@ -12,7 +12,6 @@
 #include<opencv2/core.hpp>
 #include <opencv2/core/hal/interface.h>
 #include<opencv2/imgproc/imgproc.hpp>
-#include "Grab.h"
 
 // Namespace for using pylon objects.
 using namespace Pylon;
@@ -178,14 +177,14 @@ bool get_chessboard_corners(vector<Mat> img_arr_left, vector<Mat> img_arr_right,
     vector<vector<cv::Point2f>>& found_coreners_right, vector<vector<cv::Point3f>>& obj_points, vector <cv::Point3f> obj_corners, cv::Size board_sz, size_t success_cases_) {
     size_t success_cases_left = get_chessboard_corners(img_arr_left, found_coreners_left,obj_points, obj_corners, board_sz, success_cases_);
     size_t success_cases_right = get_chessboard_corners(img_arr_right, found_coreners_right, board_sz, success_cases_ - 1);
-    if (success_cases_right == success_cases_left)
+    if (success_cases_right == success_cases_left && obj_points.size() == success_cases_left) 
     {
         cout << "All nice!" << endl;
         return true;
     }
     else
     {
-        cerr << " Something get wrong" << endl;
+        cerr << "Nmber of images not euqal number of aray of chessboar points" << endl;
         return false;
     }
 
@@ -193,7 +192,7 @@ bool get_chessboard_corners(vector<Mat> img_arr_left, vector<Mat> img_arr_right,
 
 static const size_t c_maxCamerasToUse = 2; 
 // Number of images to be grabbed.
-static const uint32_t c_countOfImagesToGrab = 100;
+static const uint32_t c_countOfImagesToGrab = 300;
 
 int main(int argc, char* argv[])
 {
@@ -214,31 +213,67 @@ int main(int argc, char* argv[])
     left_file.open("left.txt");
     right_file.open("right.txt");
 
-    create_array_of_images(left_file, 25, left_calibration_array);
-    create_array_of_images(right_file, 25, right_calibration_array);
+    create_array_of_images(left_file, 5, left_calibration_array);
+    create_array_of_images(right_file, 5, right_calibration_array);
 
     create_known_chessboadr_posiyion(object_corners, calibration_squar_edge_length, board_sz);
     //get_chessboard_corners(left_calibration_array, right_calibration_array, img_points_left, img_points_right,
     //    object_points, object_corners, board_sz, success_cases);
     get_chessboard_corners(left_calibration_array, img_points_left, object_points, object_corners, board_sz, success_cases);
     get_chessboard_corners(right_calibration_array, img_points_right, board_sz, success_cases);
-    cout << img_points_left.size() << "   " << img_points_right.size() << "   " << object_points.size() << endl;
+    cout << "number of left images in array  " << img_points_left.size() << " number of right images in array " << img_points_right.size()
+         << " number of arrays of chessboard points in array " << object_points.size() << endl;
     Mat camera_matrix_right, dist_coefs_right, camera_matrix_left, dist_coefs_left, R, T, E, F;
     cv::stereoCalibrate(object_points, img_points_left, img_points_right, camera_matrix_left, dist_coefs_left,
         camera_matrix_right, dist_coefs_right, cv::Size(720, 576), R, T, E, F, cv::CALIB_RATIONAL_MODEL | cv::CALIB_FIX_PRINCIPAL_POINT);
 
-    Mat R1, R2, P1, P2, map11, map12, map21, map22, new_camera_matrix_left, new_camera_matrix_right;
+    Mat undistort_right, undistort_left, left_cam_matr, left_dist, undis_l;
 
-    cv::stereoRectify(camera_matrix_left, dist_coefs_left, camera_matrix_right, dist_coefs_right, cv::Size(720, 576), R, T, R1, R2, P1, P2, cv::noArray());
+    cv::calibrateCamera(object_points, img_points_left, image_size, left_cam_matr, left_dist, cv::noArray(), cv::noArray());
+    
+    cv::undistort(left_calibration_array[2], undistort_left, camera_matrix_left, dist_coefs_left, cv::noArray());
+    cv::undistort(left_calibration_array[2], undis_l, left_cam_matr, left_dist, cv::noArray());
+    cv::undistort(right_calibration_array[2], undistort_right, camera_matrix_right, dist_coefs_right, cv::noArray());
+    cv::imshow("undistorted left", undistort_left);
+    cv::imshow("undistorted kkbkbn", undis_l);
+    cv::waitKey(300);
 
-    cv::initUndistortRectifyMap(camera_matrix_left, dist_coefs_left, R1, P1, image_size, CV_16SC2, map11, map12);
-    cv::initUndistortRectifyMap(camera_matrix_right, dist_coefs_right, R2, P2, image_size, CV_16SC2, map21, map22);
-
-    cv::initUndistortRectifyMap(camera_matrix_left, dist_coefs_left, R1, new_camera_matrix_left, image_size, CV_16SC2, map11, map12);
-    cv::initUndistortRectifyMap(camera_matrix_right, dist_coefs_right, R2, new_camera_matrix_right, image_size, CV_16SC2, map21, map22);
 
 
-    //if (false) {// Before using any pylon methods, the pylon runtime must be initialized. 
+    cv::Ptr<cv::StereoBM> sgbm_matcher = cv::StereoBM::create(max_disp, 21);
+    sgbm_matcher->setTextureThreshold(0);
+    sgbm_matcher->setUniquenessRatio(0);
+    //cv::Ptr<cv::StereoSGBM> sgbm_matcher = cv::StereoSGBM::create(0, max_disp, window_size);
+    //sgbm_matcher->setP1(24 * window_size * window_size);
+    //sgbm_matcher->setP2(96 * window_size * window_size);
+    //sgbm_matcher->setPreFilterCap(63);
+    //sgbm_matcher->setMode(cv::StereoSGBM::MODE_SGBM_3WAY);
+
+    //Mat R1, R2, P1, P2, map11, map12, map21, map22, new_camera_matrix_left, new_camera_matrix_right, Q, left_r, right_r, disp, norm_disp;
+
+    //cv::stereoRectify(camera_matrix_left, dist_coefs_left, camera_matrix_right, dist_coefs_right, cv::Size(720, 576), R, T, R1, R2, P1, P2, Q);
+
+    //cv::initUndistortRectifyMap(camera_matrix_left, dist_coefs_left, R1, P1, image_size, CV_16SC2, map11, map12);
+    //cv::initUndistortRectifyMap(camera_matrix_right, dist_coefs_right, R2, P2, image_size, CV_16SC2, map21, map22);
+
+    //cv::initUndistortRectifyMap(camera_matrix_left, dist_coefs_left, R1, new_camera_matrix_left, image_size, CV_16SC2, map11, map12);
+    //cv::initUndistortRectifyMap(camera_matrix_right, dist_coefs_right, R2, new_camera_matrix_right, image_size, CV_16SC2, map21, map22);
+    Mat left_lines, right_lines;
+    cv::computeCorrespondEpilines(img_points_left, 1, F, left_lines);
+    cv::computeCorrespondEpilines(img_points_right, 2, F, right_lines);
+    //for (size_t i = 0; i < left_lines.size(); i++)
+    //{
+    //    cout << left_lines[i];
+    //}
+    cv::imshow("ksdjkasj", left_lines);
+
+    //for (size_t i = 0; i < left_calibration_array.size() && i < right_calibration_array.size(); i++)
+    //{
+
+    //    cv::waitKey(200);
+    //}
+
+    if (false) {// Before using any pylon methods, the pylon runtime must be initialized. 
         PylonInitialize();
 
         try
@@ -306,21 +341,13 @@ int main(int argc, char* argv[])
                     cv::cvtColor(opencv_image_right, right_img, CV_BGR2GRAY);
                     cv::imshow("open cv converted img", left_img);
 
-                    Mat result_sgbm, sb_8;
-                    cv::Ptr<cv::StereoBM> sgbm_matcher = cv::StereoBM::create(max_disp, 21);
-                    sgbm_matcher->setTextureThreshold(0);
-                    sgbm_matcher->setUniquenessRatio(0);
-                    //cv::Ptr<cv::StereoSGBM> sgbm_matcher = cv::StereoSGBM::create(0, max_disp, window_size);
-                    //sgbm_matcher->setP1(24*window_size*window_size);
-                    //sgbm_matcher->setP2(96*window_size*window_size);
-                    //sgbm_matcher->setPreFilterCap(63);
-                    //sgbm_matcher->setMode(cv::StereoSGBM::MODE_SGBM_3WAY);
-                    //Mat opencv_image_right_r, opencv_image_left_r;
+                    Mat result_sgbm, sb_8, sb_8_r;
+                    //Mat opencv_image_right_r, opencv_image_left_r, result_sgbm_r;
                     //cv::remap(left_img, opencv_image_right_r, map21, map22, cv::INTER_LINEAR);
                     //cv::remap(right_img, opencv_image_left_r, map11, map12, cv::INTER_LINEAR);
                     //cv::imshow("remap img ", opencv_image_left_r);
                     sgbm_matcher->compute(left_img, right_img, result_sgbm);
-                    //sgbm_matcher->compute(opencv_image_right_r, opencv_image_left_r, result_sgbm);
+                    //sgbm_matcher->compute(opencv_image_right_r, opencv_image_left_r, result_sgbm_r);
                     cv::normalize(result_sgbm, sb_8, 0, 255, CV_MINMAX, CV_8U);
                     cv::imshow("dispariry map ", sb_8);
                     cv::waitKey(1);
@@ -341,7 +368,7 @@ int main(int argc, char* argv[])
             exitCode = 1;
         }
 
-    //}
+    }
 
     // Comment the following two lines to disable waiting on exit.
     cerr << endl << "Press enter to exit." << endl;
