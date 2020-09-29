@@ -240,6 +240,11 @@ int main(int argc, char* argv[])
 
 
 
+
+
+
+
+
     cv::Ptr<cv::StereoBM> sgbm_matcher = cv::StereoBM::create(max_disp, 21);
     sgbm_matcher->setTextureThreshold(0);
     sgbm_matcher->setUniquenessRatio(0);
